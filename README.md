@@ -1,6 +1,8 @@
 # Inverting Proxy and Agent
 
-This repository defines a reverse proxy that inverts the direction of traffic
+This repository is a loosly-coupled fork of https://github.com/google/inverting-proxy
+
+It defines a reverse proxy that inverts the direction of traffic
 between the proxy and the backend servers.
 
 That design makes configuring and hosting backends much simpler than what
@@ -12,10 +14,6 @@ is required for traditional reverse proxies:
 2. The backends do not need to be exposed to incoming requests from the proxy.
    In particular, the backends can run in different networks without needing
    to expose them to incoming traffic from the internet.
-
-## Disclaimer
-
-[This is not an official Google product](https://developers.google.com/open-source/projects#some-projects-say-that-they-are-not-an-official-google-product--what------does-that-mean)
 
 ## Background
 
@@ -49,9 +47,8 @@ This project defines two components:
 1. Something that we are calling the "Inverting Proxy"
 2. An agent that runs alongside a backend and forwards requests to it
 
-The inverting proxy can be run on App Engine. It requires incoming requests be
-authenticated via the [Users API](https://cloud.google.com/appengine/docs/python/users/)
-and forwards those requests to the appropriate backend, via the agent.
+Incoming requests may be authenticated via OAuth and are forwarded to the appropriate 
+backend, via the agent.
 
 Since neither the backend nor the agent will be accessible from the public
 internet, requests are not directly forwarded to the backend. Instead,
@@ -109,87 +106,7 @@ backend match the responses to the client.
 The forwarding agent is standalone binary written in Go and its source code
 is under the 'agent' subdirectory.
 
-## Usage
+## Why loosly-coupled?
 
-### Prerequisites
-
-First, [create a Google Cloud Platform project](https://console.cloud.google.com)
-that will host your proxy, and ensure that you have the Google
-[Cloud SDK](https://cloud.google.com/sdk/) installed on your machine.
-
-### Setup
-
-Save the ID of your project in the environment variable `PROJECT_ID`, and then
-run the command
-
-```sh
-make deploy
-```
-
-This will deploy 3 App Engine services to your project (one for the proxy,
-one for agents to contact, and one that implements an API for managing
-proxy endpoints).
-
-### Registering Backends
-
-Before you can connect a backend server to your proxy, you must use the proxy's
-admin API to create a record of that backend. This is just a simple HTTP
-REST API with create, list, and delete operations. There is no client tool
-provided for the admin API, but you can access it using `curl`.
-
-To list the current backends:
-
-```sh
-curl -H "Authorization: Bearer $(gcloud auth print-access-token)" \
-    https://api-dot-${PROJECT_ID}.appspot.com/api/backends
-```
-
-To create a backend:
-
-```sh
-curl -H "Authorization: Bearer $(gcloud auth print-access-token)" \
-    -d "${BACKEND_RECORD}" \
-    https://api-dot-${PROJECT_ID}.appspot.com/api/backends
-```
-
-... where "${BACKEND_RECORD}" is a JSON object with the following fields:
-
-* id: An arbitary name for the backend
-* endUser: The email address of the end user connecting to that backend.
-  The email address must be for a Google account.
-  Alternatively, you can use the special string "allUsers" to make your server public.
-* backendUser: The email address of account running the agent.
-  This should be the account listed as "active" when you run `gcloud auth list`
-  on the machine where the agent runs.
-* pathPrefixes: This specifies the list of URL paths served by the backend.
-  To match all request, use `["/"]`.
-
-Finally, to delete a backend:
-
-```sh
-curl -X DELETE \
-    -H "Authorization: Bearer $(gcloud auth print-access-token)" \
-    https://api-dot-${PROJECT_ID}.appspot.com/api/backends/${BACKEND_ID}
-```
-
-### Running Backends
-
-Once you have created the record for your backend using the API, you can
-run the agent alongside your server with the following command:
-
-```sh
-docker run --net=host --rm -it \
-    -v "${HOME}/.config:/root/.config" \
-    --env="PORT=${PORT}" \
-    --env="BACKEND=${BACKEND_ID}" \
-    --env="PROXY=https://agent-dot-${PROJECT_ID}.appspot.com/" \
-    gcr.io/inverting-proxy/agent
-```
-
-And then you can access your backend by vising https://${PROJECT_ID}.appspot.com
-
-## Limitations
-
-Currently, the inverting proxy only supports HTTP requests. In particular,
-websockets are not supported, so you have to use an adapter like socket.io
-if you want to use the inverting proxy with a service that requires websockets.
+The design and approach is very similar but this repository is not adding
+any deployment-scripts and is not designed solely for AppEngine.

@@ -38,11 +38,9 @@ import (
 
 	"github.com/golang/groupcache/lru"
 	"golang.org/x/net/context"
-	"golang.org/x/oauth2/google"
-	compute "google.golang.org/api/compute/v1"
 
-	"github.com/google/inverting-proxy/agent/utils"
-	"github.com/google/inverting-proxy/agent/websockets"
+	"github.com/johannesboyne/inverting-proxy/agent/utils"
+	"github.com/johannesboyne/inverting-proxy/agent/websockets"
 )
 
 const (
@@ -158,20 +156,6 @@ func pollForNewRequests(client *http.Client, hostProxy http.Handler, backendID s
 	}
 }
 
-func getGoogleClient(ctx context.Context) (*http.Client, error) {
-	sdkConfig, err := google.NewSDKConfig("")
-	if err == nil {
-		return sdkConfig.Client(ctx), nil
-	}
-
-	client, err := google.DefaultClient(ctx, compute.CloudPlatformScope, emailScope)
-	if err != nil {
-		return nil, err
-	}
-	client.Transport = utils.RoundTripperWithVMIdentity(ctx, client.Transport, *proxy)
-	return client, nil
-}
-
 // waitForHealthy runs health checks against the backend and returns
 // the first time it sees a healthy check.
 func waitForHealthy() {
@@ -223,16 +207,11 @@ func runAdapter() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	client, err := getGoogleClient(ctx)
-	if err != nil {
-		return err
-	}
-	client.Timeout = *proxyTimeout
-
 	hostProxy, err := hostProxy(ctx, *host, *shimPath, *shimWebsockets)
 	if err != nil {
 		return err
 	}
+	client := &http.Client{}
 	pollForNewRequests(client, hostProxy, *backendID)
 	return nil
 }

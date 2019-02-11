@@ -19,17 +19,12 @@ package utils
 
 import (
 	"bufio"
-	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
-	"log"
 	"net/http"
-	"sync"
 	"time"
-
-	"cloud.google.com/go/compute/metadata"
 )
 
 const (
@@ -124,78 +119,6 @@ func parseRequestIDs(response *http.Response) ([]string, error) {
 		return nil, fmt.Errorf("Failed to parse the requests: %q\n", err.Error())
 	}
 	return requests, nil
-}
-
-func hasVMServiceAccount() bool {
-	if !metadata.OnGCE() {
-		return false
-	}
-
-	if _, err := metadata.Get("instance/service-accounts/default/email"); err != nil {
-		return false
-	}
-	return true
-}
-
-func getVMID(audience string) string {
-	for {
-		idPath := fmt.Sprintf("instance/service-accounts/default/identity?format=full&audience=%s", audience)
-		vmID, err := metadata.Get(idPath)
-		if err == nil {
-			return vmID
-		}
-		log.Printf("failure fetching a VM ID: %v", err)
-	}
-}
-
-type vmTransport struct {
-	wrapped http.RoundTripper
-
-	// Protects the `currID` field below
-	sync.Mutex
-	currID string
-}
-
-func (t *vmTransport) RoundTrip(r *http.Request) (*http.Response, error) {
-	t.Lock()
-	id := t.currID
-	t.Unlock()
-	r.Header.Add(HeaderVMID, id)
-	return t.wrapped.RoundTrip(r)
-}
-
-// RoundTripperWithVMIdentity returns an http.RoundTripper that includes a GCE VM ID token in
-// every outbound request. The token is fetched from the metadata server and
-// stored in the 'X-Inverting-Proxy-VM-ID' header.
-//
-// This method relies on the Google Compute Engine functionality for verifying a VM's identity
-// (https://cloud.google.com/compute/docs/instances/verifying-instance-identity), so it if this
-// is not running inside of a Google Compute Engine VM, then it just returns the passed in RoundTripper.
-func RoundTripperWithVMIdentity(ctx context.Context, wrapped http.RoundTripper, proxyURL string) http.RoundTripper {
-	if !hasVMServiceAccount() {
-		return wrapped
-	}
-
-	transport := &vmTransport{
-		wrapped: wrapped,
-		currID:  getVMID(proxyURL),
-	}
-	go func() {
-		ticker := time.NewTicker(10 * time.Second)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-				nextID := getVMID(proxyURL)
-				transport.Lock()
-				transport.currID = nextID
-				transport.Unlock()
-			}
-		}
-	}()
-	return transport
 }
 
 // ListPendingRequests issues a single request to the proxy to ask for the IDs of pending requests.
