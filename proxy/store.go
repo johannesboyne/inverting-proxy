@@ -42,11 +42,6 @@ const (
 	responseKind        = "response"
 )
 
-type inMemoryStore struct {
-	requests  map[string]*Request
-	responses map[string]*Response
-}
-
 // Type persistentStore implements the Store interface and uses the Google Cloud Datastore for storing data.
 type persistentStore struct {
 	responses          map[string]*Response
@@ -58,7 +53,12 @@ type persistentStore struct {
 // NewPersistentStore returns a new implementation of the Store interface that uses the
 // Google Cloud Datastore as its backing implementation.
 func NewPersistentStore() Store {
-	return &persistentStore{}
+	return &persistentStore{
+		responses:          make(map[string]*Response),
+		requests:           make(map[string]*Request),
+		backends:           make(map[string]*Backend),
+		registeredBackends: make(map[string]bool),
+	}
 }
 
 // WriteRequest writes the given request to the Datastore.
@@ -183,7 +183,9 @@ func (d *persistentStore) DeleteBackend(ctx context.Context, backendID string) e
 
 // LookupBackend looks up the backend for the given user and path.
 func (d *persistentStore) LookupBackend(ctx context.Context, endUser, path string) (string, error) {
+	log.Println("LOOKUP", d.backends)
 	for _, b := range d.backends {
+		log.Println(b.PathPrefixes[0], "==", path)
 		if b.PathPrefixes[0] == path {
 			return b.BackendID, nil
 		}

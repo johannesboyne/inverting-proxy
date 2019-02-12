@@ -430,16 +430,20 @@ func NewProxy(s Store) http.Handler {
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.Timeout(60 * time.Second))
 
+	r.HandleFunc("/agent/pending", func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+		log.Println("---------- " + r.Header.Get(HeaderBackendID))
+		handleAgentRequest(ctx, s, w, r)
+	})
+
+	r.HandleFunc("/api/backends", func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+		handleAPIRequest(ctx, s, w, r)
+	})
+
 	r.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
-		log.Println(r.Header)
-		if r.Header.Get("X-Agent") != "" {
-			handleAgentRequest(ctx, s, w, r)
-			return
-		} else if r.Header.Get("X-API") != "" {
-			handleAPIRequest(ctx, s, w, r)
-			return
-		}
+		log.Println(">>>>>>>>>> ")
 		ID := middleware.GetReqID(ctx)
 		proxyHandler(ctx, s, ID, w, r)
 	})
